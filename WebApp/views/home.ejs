@@ -1,0 +1,193 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VAULTWATCH</title>
+  <link rel="stylesheet" href="path/to/font-awesome/css/all.min.css"> <!-- Include FontAwesome CSS -->
+  <style>
+    body {
+      font-family: 'Arial', sans-serif;
+      background-color: #f0f0f0;
+    }
+
+    .top-section {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 20px;
+      background-color: #007BFF;
+      color: #FFF;
+    }
+
+    /* Title Styling */
+    .title {
+      font-size: 24px;
+      font-weight: bold;
+      margin-right: auto; /* Push 'Team 3' to the right */
+    }
+
+    /* Team Touch Styling */
+    .team-touch {
+      font-size: 16px;
+      font-weight: bold;
+    }
+
+    .redstyle{
+      background: #ff5555;
+      border: 1px solid grey;
+      padding: 30;
+
+      border-radius: 5px;
+    }
+
+    .dashboard-container {
+      max-width: 800px;
+      margin: 20px auto;
+      padding: 20px;
+      background-color: #ffffff;
+      border-radius: 10px;
+      box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    }
+
+    .sensor-container {
+      display: flex;
+      flex-direction: row;
+      justify-content: space-around;
+      align-items: center;
+      margin-bottom: 20px;
+    }
+
+    .sensor-box {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      border: 1px solid #ddd;
+      padding: 20px;
+      background-color: #fff;
+      border-radius: 10px;
+      width: 30%;
+      box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+    }
+
+    .sensor-box h5 {
+      font-size: 16px;
+      font-weight: bold;
+      color: #333;
+    }
+
+    .sensor-value {
+      font-size: 24px;
+      font-weight: bold;
+      color: #007BFF;
+    }
+
+    .sensor-status {
+      font-size: 14px;
+      color: #333;
+    }
+
+    .alarm-message {
+      text-align: center;
+      background-color: #ff5555;
+      color: #fff;
+      padding: 10px;
+      margin: 20px 0;
+      border-radius: 5px;
+      box-shadow: 0 0 5px rgba(0, 0, 0, 0.1);
+    }
+
+    .overall-message {
+      font-size: 18px;
+      font-weight: bold;
+      text-align: center;
+      margin-top: 10px;
+    }
+
+    .historical-data-section {
+      text-align: center;
+      margin-top: 20px;
+    }
+
+    .historical-data-heading {
+      font-size: 24px;
+      font-weight: bold;
+      color: #333;
+    }
+
+    .view-historical-link {
+      text-decoration: none;
+      background-color: #007BFF;
+      color: #FFF;
+      padding: 10px 20px;
+      border-radius: 5px;
+      font-size: 16px;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="top-section">
+    <div class="title">VaultWatch</div>
+    <div class="team-touch">Team 3</div>
+  </div>
+
+
+  <!-- Dashboard Container -->
+  <section style="display: flex; flex-direction: row; justify-content: center; align-items: center; margin-bottom: 20px;">
+  <div style="text-align: center;">
+    <h5 style="font-size: 18px; font-weight: bold; color: #333;">Most Recent Data:</h5>
+    <span style="font-size: 16px; font-weight: bold; color: #007BFF;"><%= data.datetime %></span>
+  </div>
+</section>
+
+  <div class="dashboard-container">
+
+    <!-- Current Data Section -->
+    <div class="sensor-container">
+      <div class="sensor-box">
+        <h5>Internal Air Quality</h5>
+        <span class="sensor-value"><%= data.iaq %></span>
+        <span class=<%= data.iaq < 74 ? "sensor-status" : "redstyle" %>><%= data.iaq < 51 ? "Ok" : data.iaq > 50 && data.iaq < 74 ? "Poor IAQ" : "VERY POOR" %></span>
+        <span class="sensor-status"><%= data.iaq < 51 ? "" : data.iaq > 50 && data.iaq < 74 ? "Activate HVAC AQC" : "Activate HVAC AQC" %></span>
+      </div>
+      <div class="sensor-box">
+        <h5>Humidity</h5>
+        <span class="sensor-value"><%= data.humidity %></span>
+        <span class="sensor-status"><%= data.humidity < 30 ? "LOW" : data.humidity > 29 && data.humidity < 60 ? "OK" : "HIGH" %></span>
+         <span class="sensor-status"><%= data.humidity < 30 ? "Activate HVAC Ventilation" : data.humidity > 29 && data.humidity < 60 ? "" : "Activate HVAC Ventilation" %></span>
+      </div>
+      <div class="sensor-box">
+        <h5>Temperature</h5>
+        <span class="sensor-value"><%= data.temperature %></span>
+        <span class="sensor-status <%= data.temperature > 25 ? "redColor" : "" %>">
+          <%= data.temperature < 15 ? "LOW" : data.temperature > 14 && data.temperature < 26 ? "OK" : "HIGH" %>
+        </span>
+        <span><%= data.temperature < 15 ? "Adjust HVAC heating" : ""%></span>
+        <span><%= data.temperature > 25 ? "Adjust HVAC heating" : ""%></span>
+      </div>
+    </div>
+
+    <!-- Alarm Message Section -->
+    <div class="alarm-message">
+  <%= (data.temperature > 14 && data.temperature < 26 && data.humidity > 29 && data.humidity < 60 && data.iaq < 51) ? "OPTIMAL" : "ALARM" %>
+</div>
+
+    
+
+    <!-- Historical Data Section -->
+    <div class="historical-data-section">
+      <h1 class="historical-data-heading">HISTORICAL DATA</h1>
+      <a href="/api/history" class="view-historical-link">View Historical Readings</a>
+    </div>
+    
+    <div class="About Us(Team3)">
+      <h1 class="About Us(Team3)"><a href="/about.ejs">About Us</a></h1>
+    </div>
+
+  </div>
+
+</body>
+</html>

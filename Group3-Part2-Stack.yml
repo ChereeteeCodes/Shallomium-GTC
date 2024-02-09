@@ -1,0 +1,343 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: EC2 Auto Scaling Group with ALB, Route 53, TLS Certificate, NAT Gateway, WAF, CodeBuild, CodeDeploy, CodeCommit, CodePipeline
+Parameters:
+  Vpc:
+    Type: AWS::EC2::VPC::Id
+    Description: VPC ID where resources will be created
+    Default: "vpc-00f9c4d2d7ac05ec4"
+
+  PrivateSubnets:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: The Subnets to launch the EC2 instance into. Deployed into private subnet(s).
+    Default: "subnet-0c16ce81d84e81084,subnet-0e696427c18d3c221"
+
+  PublicSubnets:
+    Type: List<AWS::EC2::Subnet::Id>
+    Description: The Subnets to launch the Load Balancer instance into. Deployed into public subnet(s).
+    Default: "subnet-065c4e259d19ec11b,subnet-047d62be8b0e43286"
+
+  Region:
+    Type: String
+    Description: The region to deploy the EC2 instance in.
+    Default: "us-east-1"
+
+  S3Bucket:
+    Type: String
+    Description: Name of the existing S3 bucket for Lambda function code
+    Default: "group3-buildartifactbucket"
+
+Resources:
+  DynamoDBTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: group3DDBtable
+      AttributeDefinitions:
+        - AttributeName: thingid
+          AttributeType: S
+        - AttributeName: datetime
+          AttributeType: S
+      KeySchema:
+        - AttributeName: thingid
+          KeyType: HASH
+        - AttributeName: datetime
+          KeyType: RANGE
+      ProvisionedThroughput:
+        ReadCapacityUnits: 5
+        WriteCapacityUnits: 5
+
+  Group3LambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: Group3Lambda
+      Architectures:
+        - x86_64
+      Handler: "index.lambda_handler"
+      Role: arn:aws:iam::920119599456:role/cil-academy-lambda-role
+      Runtime: python3.10
+      #Timeout: 60
+      MemorySize: 128
+      #Environment:
+      #  Variables:
+      #    SNS_TOPIC_ARN: !Ref SNSTopic
+          #DYNAMODB_TABLE_NAME: group3-DDBtable
+          #IOT_ANALYTICS_PIPELINE_ARN: arn:aws:iotanalytics:us-east-1:920119599456:pipeline/projectgroup3pipeline
+          #IOT_ANALYTICS_CHANNEL_ARN: arn:aws:iotanalytics:us-east-1:920119599456:channel/projectgroup3
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+
+          def lambda_handler(event, context):
+              client = boto3.client('dynamodb')  # Log the entire event for debugging
+
+              # Extract data from the parsed JSON payload
+              
+              response = client.put_item(
+                  TableName='group3DDBtable',
+                  Item={
+                      'thingid': {'S': event['thingid']},
+                      'temperature': {'N': str(event['temperature'])},
+                      'humidity': {'N': str(event['humidity'])},
+                      'iaq': {'N': str(event['iaq'])},
+                      'datetime': {'S': event['datetime']},
+                      #'msgid': {'S': event['msgid']}
+                  }
+              )
+      Timeout: 30  # Adjust as needed
+      Environment:
+        Variables:
+          SNS_TOPIC_ARN: !Ref SNSTopic
+
+ 
+        
+        #S3Bucket: group3-buildartifactbucket
+        #S3Key: group3lambda.zip
+
+  LambdaInvoke:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt Group3LambdaFunction.Arn
+      Principal: iot.amazonaws.com
+      SourceArn: !GetAtt Group3IoTRule.Arn
+
+  Group3IoTRule:
+    Type: AWS::IoT::TopicRule
+    Properties:
+      RuleName: Group3SensorDataRule
+      TopicRulePayload:
+        Sql: SELECT * FROM 'vaulticore/environment/ags1'
+        Actions:
+          - Lambda:
+              FunctionArn: !GetAtt Group3LambdaFunction.Arn
+      # RuleDisabled: false
+      Tags:
+        - Key: CreatedBy
+          Value: Group3
+
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: Group3Alb-SG
+      GroupDescription: ALB Security Group for group 3
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+        - IpProtocol: tcp
+          FromPort: 8000
+          ToPort: 8000
+          CidrIp: 0.0.0.0/0
+
+  EC2SecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupName: Group3EC2-SG
+      GroupDescription: EC2 Security Group for group 3
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 8000
+          ToPort: 8000
+          SourceSecurityGroupId: !GetAtt ALBSecurityGroup.GroupId
+
+  Group3LaunchConfiguration:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      ImageId: ami-00b8917ae86a424c9
+      InstanceType: t2.micro
+      IamInstanceProfile: cil-academy-ec2-ssm-role
+      SecurityGroups:
+        - !Ref EC2SecurityGroup
+
+      UserData: !Base64
+        Fn::Sub: |
+          #!/bin/bash
+          echo "Beginning of Group3 User Data Script"
+          cd ~
+          sudo yum update -y
+          echo "[Group3] Create a webapp folder"
+          sudo mkdir -pv /WebApp
+          echo "[Group3 INFO] Download webapp folder from s3 bucket"
+          aws s3 cp --recursive s3://group3-buildartifactbucket/WebApp/ /WebApp/
+          cd /WebApp/
+          echo "[Group3 INFO] checking we are in our webapp directory"
+          pwd && ls -lhart
+          echo "[Group3 INFO] Installing NodeSource's Node.js repository"
+          sudo yum install -y https://rpm.nodesource.com/pub_14.x/el/7/x86_64/nodesource-release-el7-1.noarch.rpm
+          echo "[Group3 INFO] Installing node on the Instance"
+          sudo yum install nodejs -y
+          echo "[Group3 INFO] Installing express and its dependencies"
+          sudo npm init -y
+          echo "[Group3 INFO] Installing express"
+          sudo npm install express
+          echo "[Group3 INFO] Using npm to download AWS SDKs"
+          sudo npm install aws-sdk
+          echo "[Group3 INFO] npm install"
+          sudo npm install
+          echo "[Group3 INFO] audit fix"
+          sudo npm audit fix --force
+          echo "[Group3 INFO] launch node server"
+          # node server.js                
+          echo "[Group3 INFO] copying service units to systemd"
+          sudo cp group3server.service /etc/systemd/system/
+          sudo systemctl enable group3server
+          sudo systemctl daemon-reload          
+          sudo systemctl start group3server
+          sudo systemctl status group3server
+          echo "End of Group3 User Data Script###"
+       
+  Group3AutoScalingGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      AutoScalingGroupName: Group3AutoScalingGroup
+      VPCZoneIdentifier: !Ref PrivateSubnets
+      LaunchConfigurationName: !Ref Group3LaunchConfiguration
+      MinSize: 2
+      MaxSize: 5
+      DesiredCapacity: 2
+      TargetGroupARNs:
+        - !Ref Group3TargetGroup
+      AvailabilityZones:
+        - us-east-1a
+        - us-east-1b
+      Tags:
+        - Key: Name
+          Value: Group3Instance
+          PropagateAtLaunch: true
+
+  MyLoadBalancer:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: Group3LoadBalancer
+      Subnets: !Ref PublicSubnets
+      SecurityGroups:
+        - !Ref ALBSecurityGroup
+      Scheme: internet-facing
+      LoadBalancerAttributes:
+        - Key: idle_timeout.timeout_seconds
+          Value: "60"
+      Tags:
+        - Key: Name
+          Value: Group3ALB
+
+  Group3TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: Group3TargetGroup
+      Protocol: HTTP
+      Port: 8000
+      VpcId: !Ref Vpc
+      HealthCheckProtocol: HTTP
+      HealthCheckPort: traffic-port
+      HealthCheckPath: /
+      TargetType: instance
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: "20"
+      UnhealthyThresholdCount: 3
+      VpcId: !Ref Vpc
+
+  Group3Listener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref Group3TargetGroup
+      LoadBalancerArn: !Ref MyLoadBalancer
+      Port: 443
+      Protocol: HTTPS
+      Certificates: 
+        - CertificateArn: arn:aws:acm:us-east-1:920119599456:certificate/12bc1f4c-7b94-48b8-867f-f4310f91c845
+
+  Group3Route53RecordSet:
+    Type: AWS::Route53::RecordSet
+    Properties:
+     # HostedZoneName: tspace.uk
+      HostedZoneId: Z00974392C6FM2O8GYXD3
+      Name: gtc3.tspace.uk
+      Type: A
+      AliasTarget:
+        DNSName:
+          Fn::GetAtt:
+            - MyLoadBalancer
+            - DNSName
+        EvaluateTargetHealth: true
+        HostedZoneId:
+          Fn::GetAtt:
+            - MyLoadBalancer
+            - CanonicalHostedZoneID
+
+  Group3IPSetDenyList:
+    Type: AWS::WAFv2::IPSet
+    Properties:
+      Description: IP addresses to Deny access
+      Name: Group3WebACLIPSet
+      Scope: REGIONAL
+      IPAddressVersion: IPV4
+      Addresses:
+        - 192.0.2.44/32
+
+  Group3WebACL:
+    Type: AWS::WAFv2::WebACL
+    Properties:
+      Name: Group3IPRestrictions
+      Scope: REGIONAL
+      DefaultAction:
+        Allow: {}
+      Rules:
+        - Name: Group3RestrictIP
+          Priority: "0"
+          Statement:
+            IPSetReferenceStatement:
+              Arn: !GetAtt Group3IPSetDenyList.Arn
+          Action:
+            Block: {}
+          VisibilityConfig:
+            SampledRequestsEnabled: "true"
+            CloudWatchMetricsEnabled: "true"
+            MetricName: Group3RestrictIP
+      VisibilityConfig:
+        SampledRequestsEnabled: "true"
+        CloudWatchMetricsEnabled: "true"
+        MetricName: Group3IPRestrictions
+
+  WebACLAssociation:
+    Type: AWS::WAFv2::WebACLAssociation
+    Properties:
+      ResourceArn: !Ref MyLoadBalancer
+      WebACLArn: !GetAtt Group3WebACL.Arn
+
+  SNSTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      TopicName: group3topic
+      DisplayName: "Vaulticore Status: Group3 Notification"
+      Tags:
+        - Key: CreatedBy
+          Value: Group3
+
+  SNSTopicSubscription:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref SNSTopic
+      Protocol: email
+      Endpoint: charityfrancis5@gmail.com
+
+
+  SNSTopicSubscription2:
+    Type: AWS::SNS::Subscription
+    Properties:
+      TopicArn: !Ref SNSTopic
+      Protocol: email
+      Endpoint: igwegbesam@gmail.com    
+
+Outputs:
+  SNSTopicArn:
+    Value: !Ref SNSTopic
+  MyLambdaFunctionArn:
+    Value: !GetAtt Group3LambdaFunction.Arn
+    Description: 'ARN of the Lambda function'

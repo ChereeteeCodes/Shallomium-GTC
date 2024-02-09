@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Historical Readings - Team 3</title>
+    <!-- Add any additional styles or links for historical readings page -->
+    <style>
+      body {
+        font-family: "Arial", sans-serif;
+        background-color: #f0f0f0;
+        margin: 0;
+      }
+
+      /* Top Section Styling */
+      .top-section {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px 20px;
+        background-color: #007bff;
+        color: #fff;
+      }
+
+      /* Title Styling */
+      .title {
+        font-size: 24px;
+        font-weight: bold;
+        margin-right: auto;
+      }
+
+      /* Team Touch Styling */
+      .team-touch {
+        font-size: 16px;
+        font-weight: bold;
+      }
+
+      /* Historical Readings Styling */
+      ul {
+        list-style-type: none;
+        padding: 0;
+      }
+
+      th,
+      td {
+        padding: 10px;
+        text-align: left;
+      }
+
+      th {
+        background-color: #007bff;
+        color: #fff;
+      }
+
+      tbody {
+        border-bottom: 1px solid #ddd;
+      }
+
+      h6 {
+        margin: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- Top Section -->
+    <div class="top-section">
+      <div class="title">VaultWatch Historical Readings</div>
+      <div class="team-touch">Team 3</div>
+    </div>
+
+    <!-- Historical Readings Container -->
+    <ul>
+      <li>
+        <table style="width: 100%">
+          <tr>
+            <th>Date</th>
+            <th>Temperature</th>
+            <th>Humidity</th>
+            <th>Internal Air Quality</th>
+          </tr>
+          <% data.forEach(function(element) { %>
+          <tr>
+            <td><h6><%= element.datetime %></h6></td>
+            <td><h6><%= element.temperature %></h6></td>
+            <td><h6><%= element.humidity %></h6></td>
+            <td><h6><%= element.iaq %></h6></td>
+          </tr>
+          <% }) %>
+        </table>
+      </li>
+    </ul>
+  </body>
+</html>

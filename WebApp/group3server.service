@@ -1,0 +1,14 @@
+[Unit]
+Description=Group3 Node.js Application
+After=network.target
+
+[Service]
+Environment=8000
+User=root
+WorkingDirectory=/WebApp/
+ExecStart=/usr/bin/node /WebApp/server.js
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
+

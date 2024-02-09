@@ -1,0 +1,96 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Group3-CloudFormation deployment pipelines template
+
+Resources:
+  BuildArtifactBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: group3-buildartifactbucket
+
+  CodeBuildProject:
+    Type: AWS::CodeBuild::Project
+    Properties:
+      Name: group3-build
+      Description: group3CodeBuild deployment
+      ServiceRole: arn:aws:iam::920119599456:role/cil-academy-cicd-codebuild-role
+      Artifacts:
+        Type: CODEPIPELINE
+        Location: !Ref BuildArtifactBucket
+      Environment:
+        ComputeType: BUILD_GENERAL1_SMALL
+        Image: aws/codebuild/amazonlinux2-x86_64-standard:3.0
+        Type: LINUX_CONTAINER
+      Source:
+        Type: CODEPIPELINE
+        BuildSpec: |
+          version: 0.2
+          phases:
+            install:
+              runtime-versions:
+                python: 3.8
+            pre_build:
+              commands:
+                - aws cloudformation validate-template --template-body file://Group3-Part2-Stack.yml
+            build:
+              commands:
+                - echo Build started on `date` 
+                - aws s3 cp WebApp s3://group3-buildartifactbucket/WebApp  --recursive
+                - aws s3 cp Group3-Part2-Stack.yml s3://group3-buildartifactbucket/Group3-Part2-Stack.yml
+      TimeoutInMinutes: 60
+
+  CodePipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      Name: group3-codepipeline
+      RoleArn: arn:aws:iam::920119599456:role/cil-academy-cicd-codepipeline-role
+      ArtifactStore:
+        Type: S3
+        Location: !Ref BuildArtifactBucket
+      Stages:
+        - Name: "Source"
+          Actions:
+            - Name: "Source"
+              ActionTypeId:
+                Category: "Source"
+                Owner: "AWS"
+                Version: "1"
+                Provider: "CodeCommit"
+              OutputArtifacts:
+                - Name: !Ref BuildArtifactBucket
+              Configuration:
+                RepositoryName: "Group3-repo"
+                BranchName: "master"
+              RunOrder: 1
+
+        - Name: "Build"
+          Actions:
+            - Name: "Build"
+              ActionTypeId:
+                Category: "Build"
+                Owner: "AWS"
+                Version: "1"
+                Provider: "CodeBuild"
+              InputArtifacts:
+                - Name: "group3-buildartifactbucket"
+              OutputArtifacts:
+                - Name: "BuildOutput"
+              Configuration:
+                ProjectName: !Ref CodeBuildProject
+              RunOrder: 2
+
+        - Name: Deploy
+          Actions:
+            - Name: DeployAction
+              ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: CloudFormation
+                Version: 1
+              Configuration:
+                StackName: Group3webappstack
+                ActionMode: CREATE_UPDATE
+                RoleArn: arn:aws:iam::920119599456:role/cil-academy-cicd-cloudformation-role
+                TemplatePath: group3-buildartifactbucket::Group3-Part2-Stack.yml
+              InputArtifacts:
+                - Name: group3-buildartifactbucket
+              RunOrder: 3
